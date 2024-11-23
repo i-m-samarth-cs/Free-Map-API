@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location and Directions</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-routing-machine/3.2.12/leaflet-routing-machine.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        #map {
+            height: 80vh;
+            width: 100%;
+        }
+        .input-container {
+            margin: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            width: 300px;
+        }
+        button {
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="input-container">
+        <input id="locationInput" type="text" placeholder="Enter a location or address">
+        <button onclick="findLocation()">Locate</button>
+        <button onclick="getDirections()">Get Directions</button>
+    </div>
+    <div id="map"></div>
+    
+    <script>
+        let map, marker, routingControl, userLocation;
+
+        // Initialize the map
+        map = L.map('map').setView([20.5937, 78.9629], 5); // Default location (India)
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Function to find and pin the destination
+        async function findLocation() {
+            const address = document.getElementById("locationInput").value;
+
+            if (!address) {
+                alert("Please enter a location.");
+                return;
+            }
+
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+            
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    alert("Location not found. Please try a different address.");
+                    return;
+                }
+
+                const { lat, lon } = data[0];
+
+                map.setView([lat, lon], 14); // Center map on the location
+
+                if (marker) {
+                    map.removeLayer(marker); // Remove previous marker
+                }
+
+                marker = L.marker([lat, lon]).addTo(map).bindPopup(`<b>${address}</b>`).openPopup();
+
+                // Store destination for routing
+                window.destinationCoords = { lat, lon };
+            } catch (error) {
+                console.error("Error fetching location:", error);
+                alert("An error occurred while finding the location.");
+            }
+        }
+
+        // Function to locate the user
+        function locateUser() {
+            return new Promise((resolve, reject) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const { latitude, longitude } = position.coords;
+                            userLocation = { lat: latitude, lon: longitude };
+
+                            // Center the map on the user's location
+                            map.setView([latitude, longitude], 14);
+
+                            resolve(userLocation);
+                        },
+                        (error) => {
+                            alert("Unable to get your location. Please check your settings.");
+                            reject(error);
+                        }
+                    );
+                } else {
+                    alert("Geolocation is not supported by your browser.");
+                    reject("Geolocation not supported");
+                }
+            });
+        }
+
+        // Function to get directions
+        async function getDirections() {
+            if (!window.destinationCoords) {
+                alert("Please locate a destination first.");
+                return;
+            }
+
+            try {
+                const userCoords = await locateUser();
+
+                if (routingControl) {
+                    map.removeControl(routingControl); // Clear existing routes
+                }
+
+                routingControl = L.Routing.control({
+                    waypoints: [
+                        L.latLng(userCoords.lat, userCoords.lon),
+                        L.latLng(window.destinationCoords.lat, window.destinationCoords.lon)
+                    ],
+                    routeWhileDragging: true
+                }).addTo(map);
+            } catch (error) {
+                console.error("Error getting directions:", error);
+            }
+        }
+    </script>
+</body>
+</html>
